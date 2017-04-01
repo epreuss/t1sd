@@ -4,22 +4,27 @@ import java.net.*;
 import java.io.*;
 public class UDPServer
 {
-    public static void main(String args[])
+    public void start()
     {
-        System.out.println("Server start!");
-        DatagramSocket aSocket = null;
+        DatagramSocket socket = null;
         try
         {
-            aSocket = new DatagramSocket(38000);
+            socket = new DatagramSocket(Definitions.serverPort);
             byte[] buffer = new byte[1000];
-            while(true)
+            System.out.println("Server start!");
+            while (true)
             {
                 DatagramPacket request = new DatagramPacket(buffer, buffer.length);
-                aSocket.receive(request);
+                socket.receive(request);
+                // Cliente conectado.
                 DatagramPacket reply = new DatagramPacket(request.getData(),
                     request.getLength(), request.getAddress(), request.getPort());
-                System.out.println("Received: " + reply.getPort());
-                aSocket.send(reply);
+                System.out.println("Received: " + reply.getAddress());
+                // Criar thread para consumo.
+                ProxyConsumer proxy = new ProxyConsumer(request.getAddress(), request.getPort());
+                proxy.start();
+                // Responde ao cliente.
+                socket.send(reply);
             }
         }
         catch (SocketException e)
@@ -32,8 +37,8 @@ public class UDPServer
         }
         finally 
         {
-            if (aSocket != null) 
-                aSocket.close();
+            if (socket != null) 
+                socket.close();
         }
     }
 }
