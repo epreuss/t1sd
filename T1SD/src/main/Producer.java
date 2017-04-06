@@ -11,7 +11,8 @@ import java.util.logging.Logger;
 public class Producer extends Thread
 {
     MyStack stack;
-    int maxProduction = 10000;
+    final int maxProduction = 10000;
+    final int productionDelay = 2;
     
     public Producer(MyStack stack)
     {
@@ -42,13 +43,14 @@ public class Producer extends Thread
     
     public void produce()
     {
-        stack.push((short) (1 + new Random().nextInt(32767)));
+        short production = (short) (1 + new Random().nextInt(32767));
+        stack.push(production);
     }
     
     public void randomSleep()
     {
         try {
-            sleep(500 + new Random().nextInt(500));
+            sleep(productionDelay);// + new Random().nextInt(500));
         } catch (InterruptedException ex) {
             Logger.getLogger(Producer.class.getName()).log(Level.SEVERE, null, ex);
         }

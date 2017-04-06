@@ -4,6 +4,14 @@ import java.net.*;
 import java.io.*;
 public class UDPServer
 {
+    MyStack stack;
+    int proxyId = 1;
+    
+    public UDPServer(MyStack stack)
+    {
+        this.stack = stack;
+    }
+    
     public void start()
     {
         DatagramSocket socket = null;
@@ -17,12 +25,13 @@ public class UDPServer
                 DatagramPacket request = new DatagramPacket(buffer, buffer.length);
                 socket.receive(request);
                 // Cliente conectado.
-                DatagramPacket reply = new DatagramPacket(request.getData(),
-                    request.getLength(), request.getAddress(), request.getPort());
-                System.out.println("Received: " + reply.getAddress());
+                System.out.println("Consumer connected; Port: " + request.getPort());
                 // Criar thread para consumo.
-                ProxyConsumer proxy = new ProxyConsumer(request.getAddress(), request.getPort());
+                ProxyConsumer proxy = new ProxyConsumer(request, stack);
                 proxy.start();
+                
+                DatagramPacket reply = new DatagramPacket(request.getData(),
+                    request.getData().length, request.getAddress(), request.getPort());
                 // Responde ao cliente.
                 socket.send(reply);
             }

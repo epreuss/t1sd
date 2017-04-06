@@ -11,7 +11,7 @@ public class MachineProducer
         MyStack stack = new MyStack();
         Producer producer = new Producer(stack);
         producer.start();
-        UDPServer server = new UDPServer();
+        UDPServer server = new UDPServer(stack);
         server.start();
     }
 }

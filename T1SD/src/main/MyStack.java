@@ -22,6 +22,14 @@ public class MyStack
     
     public synchronized short pop()
     {
-        return (short) stack.pop();
+        if (canConsume())
+            return (short) stack.pop();
+        else 
+            return -1;
+    }
+    
+    public synchronized boolean canConsume()
+    {
+        return !stack.empty();
     }
 }
