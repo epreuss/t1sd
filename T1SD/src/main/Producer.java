@@ -11,8 +11,8 @@ import java.util.logging.Logger;
 public class Producer extends Thread
 {
     MyStack stack;
-    final int maxProduction = 10000;
-    final int productionDelay = 2;
+    final int maxProduction = 50;
+    final int productionDelay = 200;
     
     public Producer(MyStack stack)
     {
