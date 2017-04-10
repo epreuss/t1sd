@@ -15,14 +15,13 @@ public class Server
         this.stack = stack;
     }
     
-    public void startByBytes()
+    public void startBySocketDatagram()
     {
         DatagramSocket socket = null;
         try
         {
             socket = new DatagramSocket(Definitions.serverPort);
             byte[] buffer = new byte[1000];
-            System.out.println("Server start!");
             while (true)
             {
                 DatagramPacket request = new DatagramPacket(buffer, buffer.length);
@@ -54,9 +53,56 @@ public class Server
         }
     }
     
-    public void startByMessage()
+    public void startBySocketConnection()
     {
-        System.out.println("Server start!");
+        ServerSocket serverSocket = null;
+        Socket clientSocket = null;
+        try
+        {
+            serverSocket = new ServerSocket(Definitions.serverPort);
+            while (true)
+            {
+                clientSocket = serverSocket.accept();  
+                // Cliente conectado.
+                System.out.println("Consumer connected; Ip: " + clientSocket.getInetAddress()+ "; Port: " + clientSocket.getPort());
+                // Cria objetos de stream.
+                DataInputStream in = new DataInputStream( clientSocket.getInputStream());
+                DataOutputStream out = new DataOutputStream( clientSocket.getOutputStream());
+                // Ouve cliente.
+                String clientId = in.readUTF();
+                // Responde ao cliente.
+                out.writeUTF(clientId);
+                // Criar thread para consumo.
+                ProxyConsumer proxy = new ProxyConsumer(clientSocket, Integer.parseInt(clientId), stack);
+                proxy.start();
+            }
+        }
+        catch (SocketException e)
+        {
+            System.out.println("Socket: " + e.getMessage());
+        }
+        catch (IOException e) 
+        {
+            System.out.println("IO: " + e.getMessage());
+        } 
+        finally 
+        {
+            try 
+            {
+                if (clientSocket != null)
+                    clientSocket.close();
+                if (serverSocket != null)
+                    serverSocket.close();
+            } 
+            catch (IOException e) 
+            {
+                System.out.println("Closing socket: " + e.getMessage());
+            }
+        }
+    }
+    
+    public void startBySocketConnectionAndMessage()
+    {
         ServerSocket serverSocket = null;
         Socket clientSocket = null;
         try

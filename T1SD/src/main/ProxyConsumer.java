@@ -1,5 +1,6 @@
 package main;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -28,30 +29,25 @@ public class ProxyConsumer extends Thread
     Socket clientSocket;
     Socket socketForMsg;
     MyStack stack;
-    boolean useDatagram;
-    final int connectionTries = 5; // For MSG connections.
     int totalConsumed = 0;
-    int id;
+    int clientId;
     
     public ProxyConsumer(DatagramPacket request, MyStack stack)
     {
         this.request = request;
         this.stack = stack;
-        this.id = Integer.parseInt(new String(request.getData()).trim());
-        useDatagram = true;
-        createDatagramSocket();
+        this.clientId = Integer.parseInt(new String(request.getData()).trim());
+        createSocketDatagram();
     }
     
-     public ProxyConsumer(Socket clientSocket, int consumerId, MyStack stack)
+    public ProxyConsumer(Socket clientSocket, int consumerId, MyStack stack)
     {
         this.clientSocket = clientSocket;
         this.stack = stack;
-        this.id = consumerId;
-        useDatagram = false;
-        //createSocketForMsg();
+        this.clientId = consumerId; 
     }
     
-    private void createDatagramSocket()
+    private void createSocketDatagram()
     {
         try
         {
@@ -63,25 +59,7 @@ public class ProxyConsumer extends Thread
         }
     }
     
-    private void createSocketForMsg()
-    {
-        int tries = 0;
-        while (tries < connectionTries)
-        {   
-            try
-            {
-                socketForMsg = new Socket(clientSocket.getInetAddress(), clientSocket.getPort());
-            } 
-            catch (IOException e) 
-            {
-                System.out.println("Proxy SocketForMsg: " + e.getMessage());
-            }
-            tries++;
-        }
-        System.out.println("Proxy Port: " + socketForMsg.getLocalPort() + ", " + socketForMsg.getPort());
-    }
-    
-    private void sendShortByDatagram(short consumed)
+    private void sendShortBySocketDatagram(short consumed)
     {
         try
         {
@@ -102,7 +80,25 @@ public class ProxyConsumer extends Thread
         }
     }
     
-    private void sendShortByMessage(short consumed)
+    private void sendShortBySocketConnection(short consumed)
+    {
+        try
+        {
+            // Cria objeto de stream.
+            DataOutputStream out = new DataOutputStream(clientSocket.getOutputStream());                        
+            // Envia short ao cliente.
+            out.writeUTF(String.valueOf(consumed));
+            // Short enviado.
+            totalConsumed += consumed;
+            //System.out.println("Proxy sent [" + consumed + "]");
+        }
+        catch (IOException e) 
+        {
+            System.out.println("Proxy IO: " + e.getMessage());
+        }
+    }
+    
+    private void sendShortBySocketConnectionAndMessage(short consumed)
     {
         try
         {
@@ -113,7 +109,7 @@ public class ProxyConsumer extends Thread
             objectOut.writeObject(msg);
             // Short enviado.
             totalConsumed += consumed;
-            System.out.println("Proxy sent [" + consumed + "]");
+            //System.out.println("Proxy sent [" + consumed + "]");
         }
         catch (IOException e) 
         {
@@ -126,19 +122,11 @@ public class ProxyConsumer extends Thread
         return stack.pop();
     }
     
-    /*
-    public ProxyConsumer(InetAddress ip, int port)
-    {
-        this.ip = ip;
-        this.port = port;
-    }
-    */
-    
     @Override
     public void run() 
     {
         int sends = 0;
-        System.out.println("Proxy Consumer [id: " + id + "] starts.");
+        System.out.println("Proxy Consumer [id: " + clientId + "] starts. It is consuming...");
         while (true)
         {
             if (stack.canConsume())
@@ -150,20 +138,29 @@ public class ProxyConsumer extends Thread
                 */
                 if (consumed == -1) 
                     continue;
-                if (useDatagram)
-                    sendShortByDatagram(consumed);
-                else
-                    sendShortByMessage(consumed);
+                
+                switch (Definitions.connectionType) 
+                {
+                    case SocketDatagram:
+                        sendShortBySocketDatagram(consumed);
+                        break;
+                    case SocketConnection:
+                        sendShortBySocketConnection(consumed);
+                        break;
+                    case SocketConnectionAndMessage:
+                        sendShortBySocketConnectionAndMessage(consumed);
+                        break;
+                }
                 sends++;
                 if (consumed == 0)
                     break;
             }
         }
-        System.out.println("Proxy Consumer [id: " + id + "] ends; Total: " + totalConsumed + "; Sent " + sends + " shorts.");
+        System.out.println("Proxy Consumer [id: " + clientId + "] ends; Total: " + totalConsumed + "; Sent " + sends + " shorts.");
         if (datagramSocket != null) 
         {
             datagramSocket.close();
-            //System.out.println("Socket closed.");
+            System.out.println("Proxy Consumer [id: " + clientId + "] Socket closed.");
         }
     }
 }

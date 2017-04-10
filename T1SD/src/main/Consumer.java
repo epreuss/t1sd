@@ -10,43 +10,54 @@ public class Consumer extends Thread
 {
     enum ConnectionResult { SUCCESS, TIMEOUT };
     
-    DatagramSocket datagramSocket;
-    Socket socketForMsg;
-    boolean useMessage;
+    DatagramSocket socketDatagram;
+    Socket socketConnection;    
     final int timeout = 500;
     final int totalRetransmissions = 5;
     int retransCounter = 1;
     int totalConsumed = 0;    
     int id;
     
-    public Consumer(int id, boolean useMessage)
+    public Consumer(int id)
     {
         this.id = id;
-        this.useMessage = useMessage;
         //System.out.println("Consumer [id: " + id + "] is created.");
     }
     
-    private boolean connectToServerByBytes()
+    private boolean connectBySocketDatagram()
     {
-        datagramSocket = createDatagramSocket();
-        ConnectionResult lastResult = tryConnectionWithBytes();
+        socketDatagram = createSocketDatagram();
+        ConnectionResult lastResult = tryConnectBySocketDatagram();
         while (lastResult == ConnectionResult.TIMEOUT && retransCounter < totalRetransmissions)
         {            
             retransCounter++;        
-            lastResult = tryConnectionWithBytes();
+            lastResult = tryConnectBySocketDatagram();
         }
         boolean connected = lastResult == ConnectionResult.SUCCESS;
         return connected;
     }
     
-    private boolean connectToServerByMessage()
+    private boolean connectBySocketConnection()
     {
-        socketForMsg = createSocketForMsg();
-        ConnectionResult lastResult = tryConnectionWithMessage();
+        socketConnection = createSocketConnetion();
+        ConnectionResult lastResult = tryConnectBySocketConnection();
         while (lastResult == ConnectionResult.TIMEOUT && retransCounter < totalRetransmissions)
         {            
             retransCounter++;        
-            lastResult = tryConnectionWithMessage();
+            lastResult = tryConnectBySocketConnection();
+        }
+        boolean connected = lastResult == ConnectionResult.SUCCESS;
+        return connected;
+    }
+    
+    private boolean connectBySocketConnectionAndMessage()
+    {
+        socketConnection = createSocketConnetion();
+        ConnectionResult lastResult = tryConnectBySocketConnectionAndMessage();
+        while (lastResult == ConnectionResult.TIMEOUT && retransCounter < totalRetransmissions)
+        {            
+            retransCounter++;        
+            lastResult = tryConnectBySocketConnectionAndMessage();
         }
         boolean connected = lastResult == ConnectionResult.SUCCESS;
         return connected;
@@ -56,19 +67,24 @@ public class Consumer extends Thread
     public void run() 
     {
         System.out.println("Consumer [id: " + id + "] is connecting to server...");
-        if (useMessage)
+        switch (Definitions.connectionType)
         {
-            if (connectToServerByMessage())
-                consumeDataWithMessage();
-        }
-        else 
-        {
-            if (connectToServerByBytes())
-                consumeDataWithBytes();
+            case SocketDatagram:
+                if (connectBySocketDatagram())
+                    consumeDataBySocketDatagram();
+                break;
+            case SocketConnection:
+                if (connectBySocketConnection())
+                    consumeDataBySocketConnection();
+                break;
+            case SocketConnectionAndMessage:
+                if (connectBySocketConnectionAndMessage())
+                    consumeDataBySocketConnectionAndMessage();
+                break;
         }
     }
     
-    public void consumeDataWithBytes()
+    public void consumeDataBySocketDatagram()
     {
         //System.out.println("Consumer [id: " + id + "] starts consuming...");
         int receives = 0;
@@ -79,7 +95,7 @@ public class Consumer extends Thread
                 // Cria buffer.
                 byte[] buffer = new byte[1000];
                 DatagramPacket reply = new DatagramPacket(buffer, buffer.length);
-                datagramSocket.receive(reply);
+                socketDatagram.receive(reply);
                 // Recebido do proxy.
                 String data = new String(reply.getData());
                 short consumed = (short) Integer.parseInt(data.trim());
@@ -92,71 +108,67 @@ public class Consumer extends Thread
             } 
             catch (IOException e) 
             {
-                //System.out.println("IO: " + e.getMessage() + ".");
+                System.out.println(e.getMessage() + " for [id: " + id + "]");
             }
         }
         System.out.println("Consumer [id: " + id + "] ends; Total: " + totalConsumed + "; Received " + receives + " shorts.");
-        if (datagramSocket != null) 
+        if (socketDatagram != null) 
         {
-            datagramSocket.close();
-            //System.out.println("Socket closed.");
+            socketDatagram.close();
+            System.out.println("Consumer [id: " + id + "] Socket closed.");
         }
     }
     
-    public void consumeDataWithMessage()
+    public void consumeDataBySocketConnection()
     {
-        /*
-        ServerSocket serverSocket = null;
-        // Pega porta do socket que se comunicou com o servidor.
-        int localPort = socketForMsg.getLocalPort();
-        if (socketForMsg != null) 
-        {
-            try 
-            {
-                socketForMsg.close();
-            } 
-            catch (IOException e) 
-            {
-                System.out.println("IO: " + e.getMessage() + ".");
-            }
-        }
-        // Cria um socket do tipo servidor para ouvir do proxy.
-        System.out.println("Consumer local port: " + localPort);
-        try 
-        {
-            //System.out.println("Consumer [id: " + id + "] starts consuming...");
-            serverSocket = new ServerSocket(localPort);
-        } 
-        catch (IOException e) 
-        {
-            System.out.println("Server Socket: " + e.getMessage() + ".");
-        }
-        
-        // Estabelece conexão com proxy.
-        Socket proxySocket = null;
-        while (true)
-        {   
-            try 
-            {
-                proxySocket = serverSocket.accept();
-                proxySocket.setSoTimeout(timeout);
-                break;
-            }
-            catch (IOException e) 
-            {
-                System.out.println("IO: " + e.getMessage() + ".");
-            } 
-        }
-        
-        System.out.println("Recebe shorts do proxy: " + proxySocket.getLocalPort() + ", " + proxySocket.getPort());
-        */
         int receives = 0; 
         while (true)
         {   
             try 
             {
                 // Cria objeto de stream.
-                ObjectInputStream objectIn = new ObjectInputStream(socketForMsg.getInputStream());
+                DataInputStream in = new DataInputStream(socketConnection.getInputStream());
+                // Espera por resposta do proxy.
+                String reply = in.readUTF();
+                // Recebido do proxy.
+                short consumed = (short) Integer.parseInt(reply.trim());
+                receives++;
+                if (consumed == 0)
+                    break;
+                else
+                    totalConsumed += consumed;
+                //System.out.println("Got [" + consumed + "]");
+            } 
+            catch (IOException e) 
+            {
+                System.out.println(e.getMessage() + " for [id: " + id + "]");
+            } 
+        }
+        System.out.println("Consumer [id: " + id + "] ends; Total: " + totalConsumed + "; Received " + receives + " shorts.");
+        
+        if (socketConnection != null) 
+        {
+            try 
+            {
+                socketConnection.close();
+                System.out.println("Consumer [id: " + id + "] Socket closed.");
+            } 
+            catch (IOException e) 
+            {
+                System.out.println("IO: " + e.getMessage() + ".");
+            }
+        }
+    }
+    
+    public void consumeDataBySocketConnectionAndMessage()
+    {
+        int receives = 0; 
+        while (true)
+        {   
+            try 
+            {
+                // Cria objeto de stream.
+                ObjectInputStream objectIn = new ObjectInputStream(socketConnection.getInputStream());
                 // Espera por resposta do proxy.
                 Message msg = (Message)objectIn.readObject();
                 // Recebido do proxy.
@@ -170,11 +182,11 @@ public class Consumer extends Thread
                     else
                         totalConsumed += consumed;
                 }
-                System.out.println("Got [" + consumed + "]");
+                //System.out.println("Got [" + consumed + "]");
             } 
             catch (IOException e) 
             {
-                System.out.println("IO: " + e.getMessage() + ".");
+                System.out.println(e.getMessage() + " for [id: " + id + "]");
             } 
             catch (ClassNotFoundException e) 
             {
@@ -183,12 +195,12 @@ public class Consumer extends Thread
         }
         System.out.println("Consumer [id: " + id + "] ends; Total: " + totalConsumed + "; Received " + receives + " shorts.");
         
-        if (socketForMsg != null) 
+        if (socketConnection != null) 
         {
             try 
             {
-                socketForMsg.close();
-                System.out.println("Socket closed.");
+                socketConnection.close();
+                System.out.println("Consumer [id: " + id + "] Socket closed.");
             } 
             catch (IOException e) 
             {
@@ -197,7 +209,7 @@ public class Consumer extends Thread
         }
     }
     
-    private DatagramSocket createDatagramSocket()
+    private DatagramSocket createSocketDatagram()
     {
         DatagramSocket socket = null;
         try 
@@ -212,7 +224,7 @@ public class Consumer extends Thread
         return socket;
     }
     
-    private Socket createSocketForMsg()
+    private Socket createSocketConnetion()
     {
         Socket socket = null;
         try 
@@ -227,7 +239,7 @@ public class Consumer extends Thread
         return socket;
     }
     
-    private ConnectionResult tryConnectionWithBytes()
+    private ConnectionResult tryConnectBySocketDatagram()
     {
         ConnectionResult result = ConnectionResult.SUCCESS;
         try 
@@ -236,10 +248,10 @@ public class Consumer extends Thread
             InetAddress host = InetAddress.getByName(Definitions.serverIp);
             DatagramPacket request = new DatagramPacket(bytes, bytes.length, host, Definitions.serverPort);
             System.out.println("Trying [id: " + id + "] connection... " + "[tries: " + retransCounter + "]");
-            datagramSocket.send(request);
+            socketDatagram.send(request);
             byte[] buffer = new byte[1000];
             DatagramPacket reply = new DatagramPacket(buffer, buffer.length);
-            datagramSocket.receive(reply);
+            socketDatagram.receive(reply);
             System.out.println("Consumer [id: " + id + "] connected.");
         }
         catch (IOException e)
@@ -250,15 +262,39 @@ public class Consumer extends Thread
         return result;
     }
     
-    private ConnectionResult tryConnectionWithMessage()
+    private ConnectionResult tryConnectBySocketConnection()
+    {
+        ConnectionResult result = ConnectionResult.SUCCESS;
+        try 
+        {         
+            // Cria objetos de stream.
+            DataInputStream in = new DataInputStream(socketConnection.getInputStream());
+            DataOutputStream out = new DataOutputStream(socketConnection.getOutputStream());
+            // Solicita servidor.
+            System.out.println("Trying [id: " + id + "] connection... " + "[tries: " + retransCounter + "]");
+            out.writeUTF(String.valueOf(id));
+            // Espera por resposta.
+            in.readUTF();
+            // Conectado.
+            System.out.println("Consumer [id: " + id + "] connected.");
+        }
+        catch (IOException e)
+        {
+            System.out.println("IO: " + e.getMessage() + ".");
+            result = ConnectionResult.TIMEOUT;
+        } 
+        return result;
+    }
+    
+    private ConnectionResult tryConnectBySocketConnectionAndMessage()
     {
         ConnectionResult result = ConnectionResult.SUCCESS;
         Message msg = new Message(MessageType.ID, (short)id);
         try 
         {
             // Cria objetos de stream.
-            ObjectOutputStream objectOut = new ObjectOutputStream(socketForMsg.getOutputStream());
-            ObjectInputStream objectIn = new ObjectInputStream(socketForMsg.getInputStream());
+            ObjectOutputStream objectOut = new ObjectOutputStream(socketConnection.getOutputStream());
+            ObjectInputStream objectIn = new ObjectInputStream(socketConnection.getInputStream());
             // Solicita servidor.
             System.out.println("Trying [id: " + id + "] connection... " + "[tries: " + retransCounter + "]");
             objectOut.writeObject(msg);

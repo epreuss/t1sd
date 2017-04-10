@@ -8,12 +8,13 @@ public class MachineConsumer
 {
     public static void main(String args[])
     {
-        createConsumer(1, true);        
+        System.out.println("Consumers " + Definitions.connectionType + " start!");
+        createConsumer(1);        
+        createConsumer(2);   
     }
     
-    public static void createConsumer(int id, boolean useMessage)
+    public static void createConsumer(int id)
     {
-        Consumer c = new Consumer(id, useMessage);
-        c.start();
+        new Consumer(id).start();
     }
 }
